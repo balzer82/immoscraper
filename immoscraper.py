@@ -1,10 +1,9 @@
 
 # coding: utf-8
 
-# In[ ]:
-
-
-
+# # Immoscout24.de Scraper
+# 
+# Ein Script zum dumpen (in `.csv` schreiben) von Immobilien, welche auf [immoscout24.de](http://immoscout24.de) angeboten werden
 
 # In[1]:
 
@@ -47,6 +46,9 @@ def urlquery(url):
 # In[2]:
 
 def immoscout24parser(url):
+    
+    ''' Parser holt aus Immoscout24.de Suchergebnisseiten die Immobilien '''
+    
     try:
         from bs4 import BeautifulSoup
         import json
@@ -55,16 +57,21 @@ def immoscout24parser(url):
 
         scripts = soup.findAll('script')
         for script in scripts:
-            if script.text.strip().startswith('var IS24 = IS24'):
-                s = script.string.split('\r\n')
+            if 'IS24.resultList' in script.text.strip():
+                s = script.string.split('\n')
 
-
+        try:
+            s
+        except NameError:
+            print('Immoscout24.de Website wurde geändert. Bitte Scraper Code prüfen und anpassen.')
+            return
+        
         for line in s:
             if line.strip().startswith('model'):
                 immo_json = line.strip()
                 immo_json = json.loads(immo_json[7:-1])
             if line.strip().startswith('numberOfPages'):
-                maxpages = int(line.split()[1])
+                maxpages = int(line.split()[1].strip(','))
                 #print maxpages
             if line.strip().startswith('currentPageIndex'):
                 page = int(line.split()[1].strip(','))
@@ -76,12 +83,11 @@ def immoscout24parser(url):
         print "fehler in immoscout24 parser: %s" % e
 
 
+# ## Main Loop
+# 
+# Geht Wohnungen und Häuser, jeweils zum Kauf und Miete durch und sammelt die Daten
+
 # In[3]:
-
-
-
-
-# In[4]:
 
 immos = {}
 
@@ -150,42 +156,41 @@ for k in kind:
 
                 immos[immo_id] = immo
 
-            print('Scrape Page %i/%i (%i Immobilien %s %s gefunden)' % (actualpage, maxpages, len(immos), k, w))
+            print('Scrape Page %i/%i (%i Immobilien %s %s gefunden)' % (actualpage+1, maxpages, len(immos), k, w))
 
 
-# In[5]:
+# ## Datenaufbereitung & Cleaning
+# 
+# Die gesammelten Daten werden in ein sauberes Datenformat konvertiert, welches z.B. auch mit Excel gelesen werden kann. Weiterhin werden die Ergebnisse pseudonymisiert, d.h. die Anbieter bekommen eindeutige Nummern statt Klarnamen.
+
+# In[4]:
 
 import datetime
 timestamp = datetime.datetime.strftime(datetime.datetime.now(), '%Y-%m-%d-%H-%M')
 
 
-# In[ ]:
-
-
-
-
-# In[6]:
+# In[5]:
 
 import pandas as pd
 
 
-# In[73]:
+# In[6]:
 
 df = pd.DataFrame(immos).T
 df.index.name = 'ID'
 
 
-# In[74]:
+# In[7]:
 
 len(df)
 
 
-# In[81]:
+# In[8]:
 
 df[(df['Haus/Wohnung']=='Wohnung') & (df['Miete/Kauf']=='Kauf')].head()
 
 
-# In[83]:
+# In[9]:
 
 import uuid
 def anoymousfrom(name):
@@ -195,17 +200,17 @@ def anoymousfrom(name):
         return 'NaN'
 
 
-# In[84]:
+# In[10]:
 
 df['From_UUID'] = df['From'].apply(anoymousfrom)
 
 
-# In[85]:
+# In[11]:
 
 exportcols = [col for col in df.columns if col not in ['From']]
 
 
-# In[87]:
+# In[12]:
 
 df.to_csv('%s-immo-komplett.csv' % timestamp, columns=exportcols, encoding='utf-8')
 for k in kind:
@@ -217,7 +222,4 @@ for k in kind:
         f.close()
 
 
-# In[ ]:
-
-
-
+# Fragen? [@Balzer82](https://twitter.com/Balzer82)
