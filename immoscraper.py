@@ -7,16 +7,21 @@
 
 # In[1]:
 
+from bs4 import BeautifulSoup
+import json
+import urllib2
+import random
+from random import choice
+import time
+
+
+# In[2]:
+
 # urlquery from Achim Tack. Thank you!
 # https://github.com/ATack/GoogleTrafficParser/blob/master/google_traffic_parser.py
 def urlquery(url):
     # function cycles randomly through different user agents and time intervals to simulate more natural queries
     try:
-        import urllib2
-        import random
-        from random import choice
-        import time
-
         sleeptime = float(random.randint(1,6))/5
         time.sleep(sleeptime)
 
@@ -43,42 +48,30 @@ def urlquery(url):
         print "fehler in urlquery"
 
 
-# In[2]:
+# In[3]:
 
 def immoscout24parser(url):
     
     ''' Parser holt aus Immoscout24.de Suchergebnisseiten die Immobilien '''
     
     try:
-        from bs4 import BeautifulSoup
-        import json
-
         soup = BeautifulSoup(urlquery(url), 'html.parser')
-
         scripts = soup.findAll('script')
         for script in scripts:
+            #print script.text.strip()
             if 'IS24.resultList' in script.text.strip():
                 s = script.string.split('\n')
+                for line in s:
+                    #print('\n\n\'%s\'' % line)
+                    if line.strip().startswith('resultListModel'):
+                        resultListModel = line.strip('resultListModel: ')
+                        immo_json = json.loads(resultListModel[:-1])
 
-        try:
-            s
-        except NameError:
-            print('Immoscout24.de Website wurde geändert. Bitte Scraper Code prüfen und anpassen.')
-            return
-        
-        for line in s:
-            if line.strip().startswith('model'):
-                immo_json = line.strip()
-                immo_json = json.loads(immo_json[7:-1])
-            if line.strip().startswith('numberOfPages'):
-                maxpages = int(line.split()[1].strip(','))
-                #print maxpages
-            if line.strip().startswith('currentPageIndex'):
-                page = int(line.split()[1].strip(','))
-                #print page
+                        searchResponseModel = immo_json[u'searchResponseModel']
+                        resultlist_json = searchResponseModel[u'resultlist.resultlist']
+                        
+                        return resultlist_json
 
-        return [immo_json, page, maxpages]
-    
     except Exception, e:
         print "fehler in immoscout24 parser: %s" % e
 
@@ -87,139 +80,121 @@ def immoscout24parser(url):
 # 
 # Geht Wohnungen und Häuser, jeweils zum Kauf und Miete durch und sammelt die Daten
 
-# In[3]:
+# In[4]:
 
 immos = {}
 
-kind = ['Wohnung', 'Haus']
-what = ['Miete', 'Kauf']
+b = 'Sachsen'
+s = 'Dresden'
+k = 'Wohnung'
+w = 'Miete'
 
-for k in kind:
-    for w in what:
+page = 0
+print('Suche %s / %s' % (k, w))
+
+while True:
+    page+=1
+    url = 'http://www.immobilienscout24.de/Suche/S-T/P-%s/%s-%s/%s/%s?pagerReporting=true' % (page, k, w, b, s)
+
+    # Because of some timeout or immoscout24.de errors,
+    # we try until it works \o/
+    resultlist_json = None
+    while resultlist_json is None:
+        try:
+            resultlist_json = immoscout24parser(url)
+            numberOfPages = int(resultlist_json[u'paging'][u'numberOfPages'])
+            pageNumber = int(resultlist_json[u'paging'][u'pageNumber'])
+        except:
+            pass
+
+    if page>numberOfPages:
+        break
+
+    # Get the data
+    for resultlistEntry in resultlist_json['resultlistEntries'][0][u'resultlistEntry']:
+        realEstate_json = resultlistEntry[u'resultlist.realEstate']
         
-        page = 0
-        print('Suche %s / %s' % (k, w))
+        realEstate = {}
+
+        realEstate[u'Miete/Kauf'] = w
+        realEstate[u'Haus/Wohnung'] = k
+
+        realEstate['address'] = realEstate_json['address']['description']['text']
+        realEstate['city'] = realEstate_json['address']['city']
+        realEstate['postcode'] = realEstate_json['address']['postcode']
+        realEstate['quarter'] = realEstate_json['address']['quarter']
+        try:
+            realEstate['lat'] = realEstate_json['address'][u'wgs84Coordinate']['latitude']
+            realEstate['lon'] = realEstate_json['address'][u'wgs84Coordinate']['longitude']
+        except:
+            realEstate['lat'] = None
+            realEstate['lon'] = None
+            
+        realEstate['title'] = realEstate_json['title']
+
+        realEstate['numberOfRooms'] = realEstate_json['numberOfRooms']
+        realEstate['livingSpace'] = realEstate_json['livingSpace']
         
-        while True:
-            page+=1
-            url = 'http://www.immobilienscout24.de/Suche/S-T/P-%s/%s-%s/Sachsen/Dresden?pagerReporting=true' % (page, k, w)
+        realEstate['balcony'] = realEstate_json['balcony']
+        realEstate['builtInKitchen'] = realEstate_json['builtInKitchen']
+        realEstate['garden'] = realEstate_json['garden']
+        realEstate['price'] = realEstate_json['price']['value']
+        realEstate['privateOffer'] = realEstate_json['privateOffer']
+        
+        realEstate['floorplan'] = realEstate_json['floorplan']
+        realEstate['from'] = realEstate_json['companyWideCustomerId']
+        realEstate['ID'] = realEstate_json[u'@id']
+        realEstate['url'] = u'https://www.immobilienscout24.de/expose/%s' % realEstate['ID']
 
-            # Because of some timeout or immoscout24.de errors,
-            # we try until it works \o/
-            immo_json = None
-            while immo_json is None:
-                try:
-                    immo_json, actualpage, maxpages = immoscout24parser(url)
-                except:
-                    pass
+        immos[realEstate['ID']] = realEstate
 
-            if page>maxpages:
-                break
-
-            # Get the data
-            for rj in immo_json['results']:
-                immo = {}
-
-                immo_id = rj['id']
-
-                immo[u'Adresse'] = rj['address']
-                immo[u'Stadt'] = rj['city']
-                immo[u'Titel'] = rj['title']
-                immo[u'PLZ'] = rj['zip']
-                immo[u'Stadtteil'] = rj['district']
-                immo[u'Features'] = rj['checkedAttributes']
-                immo[u'Grundriss'] = rj['hasFloorplan']
-                immo[u'von privat'] = rj['privateOffer']
-
-                for i in range(len(rj['attributes'])):
-                    immo[rj['attributes'][i]['title']] = rj['attributes'][i]['value']
-
-                immo[u'Miete/Kauf'] = w
-                immo[u'Haus/Wohnung'] = k
-                
-                try:
-                    immo[u'From'] = rj['contactName']
-                except:
-                    immo[u'From'] = None
-
-                try:
-                    immo[u'Bilder'] = rj['mediaCount']
-                except:
-                    immo[u'Bilder'] = 0
-
-                try:
-                    immo[u'Lat'] = rj['latitude']
-                    immo[u'Lon'] = rj['longitude']
-                except:
-                    immo[u'Lat'] = None
-                    immo[u'Lon'] = None
-
-                immos[immo_id] = immo
-
-            print('Scrape Page %i/%i (%i Immobilien %s %s gefunden)' % (actualpage+1, maxpages, len(immos), k, w))
+    print('Scrape Page %i/%i (%i Immobilien %s %s gefunden)' % (page, numberOfPages, len(immos), k, w))
 
 
 # ## Datenaufbereitung & Cleaning
 # 
 # Die gesammelten Daten werden in ein sauberes Datenformat konvertiert, welches z.B. auch mit Excel gelesen werden kann. Weiterhin werden die Ergebnisse pseudonymisiert, d.h. die Anbieter bekommen eindeutige Nummern statt Klarnamen.
 
-# In[4]:
+# In[5]:
 
 import datetime
 timestamp = datetime.datetime.strftime(datetime.datetime.now(), '%Y-%m-%d-%H-%M')
 
 
-# In[5]:
+# In[6]:
 
 import pandas as pd
 
 
-# In[6]:
+# In[7]:
 
 df = pd.DataFrame(immos).T
 df.index.name = 'ID'
 
 
-# In[7]:
+# In[8]:
 
 len(df)
 
 
-# In[8]:
-
-df[(df['Haus/Wohnung']=='Wohnung') & (df['Miete/Kauf']=='Kauf')].head()
-
-
 # In[9]:
 
-import uuid
-def anoymousfrom(name):
-    try:
-        return str(uuid.uuid3(uuid.NAMESPACE_DNS, name.encode('utf-8')))
-    except:
-        return 'NaN'
+df.head()
 
+
+# ## Alles Dumpen
 
 # In[10]:
 
-df['From_UUID'] = df['From'].apply(anoymousfrom)
+f = open('%s-%s-%s.csv' % (timestamp, k, w), 'wb')
+f.write('# %s %s from immoscout24.de on %s\n' % (k,w,timestamp))
+df[(df['Haus/Wohnung']==k) & (df['Miete/Kauf']==w)].to_csv(f, encoding='utf-8')
+f.close()
 
 
 # In[11]:
 
-exportcols = [col for col in df.columns if col not in ['From']]
-
-
-# In[12]:
-
-df.to_csv('%s-immo-komplett.csv' % timestamp, columns=exportcols, encoding='utf-8')
-for k in kind:
-    for w in what:
-        print('Speichere %s / %s' % (k, w))
-        f = open('%s-%s-%s.csv' % (timestamp, k, w), 'w')
-        f.write('# %s %s from immoscout24.de on %s\n' % (k,w,timestamp))
-        df[(df['Haus/Wohnung']==k) & (df['Miete/Kauf']==w)].to_csv(f, columns=exportcols, encoding='utf-8')
-        f.close()
+df.to_excel('%s-%s-%s.xlsx' % (timestamp, k, w))
 
 
 # Fragen? [@Balzer82](https://twitter.com/Balzer82)

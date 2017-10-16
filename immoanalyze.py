@@ -15,13 +15,13 @@ sns.set_context('talk')
 
 # ## Stadtteile Dresden
 
-# In[112]:
+# In[2]:
 
 with open('./stadtteile-Dresden.json') as data_file:    
     stadtteil_json = json.load(data_file)
 
 
-# In[113]:
+# In[3]:
 
 stadtteile_osm = []
 for i, stadtteil in enumerate(stadtteil_json['features']):
@@ -34,7 +34,7 @@ for i, stadtteil in enumerate(stadtteil_json['features']):
 stadtteile_osm.sort()
 
 
-# In[114]:
+# In[4]:
 
 stadtteile_osm
 
