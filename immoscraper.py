@@ -1,21 +1,23 @@
-
+#!/usr/bin/python
 # coding: utf-8
 
 # # Immoscout24.de Scraper
 # 
 # Ein Script zum dumpen (in `.csv` schreiben) von Immobilien, welche auf [immoscout24.de](http://immoscout24.de) angeboten werden
 
-# In[1]:
+# In[5]:
+
 
 from bs4 import BeautifulSoup
 import json
-import urllib2
+import urllib.request as urllib2
 import random
 from random import choice
 import time
 
 
-# In[2]:
+# In[7]:
+
 
 # urlquery from Achim Tack. Thank you!
 # https://github.com/ATack/GoogleTrafficParser/blob/master/google_traffic_parser.py
@@ -37,18 +39,18 @@ def urlquery(url):
         agent = choice(agents)
         opener = urllib2.build_opener()
         opener.addheaders = [('User-agent', agent)]
-        #print agent
 
         html = opener.open(url).read()
         time.sleep(sleeptime)
         
         return html
 
-    except:
-        print "fehler in urlquery"
+    except Exception as e:
+        print('Something went wrong with Crawling:\n%s' % e)
 
 
-# In[3]:
+# In[9]:
+
 
 def immoscout24parser(url):
     
@@ -72,22 +74,23 @@ def immoscout24parser(url):
                         
                         return resultlist_json
 
-    except Exception, e:
-        print "fehler in immoscout24 parser: %s" % e
+    except Exception as e:
+        print("Fehler in immoscout24 parser: %s" % e)
 
 
 # ## Main Loop
 # 
 # Geht Wohnungen und Häuser, jeweils zum Kauf und Miete durch und sammelt die Daten
 
-# In[4]:
+# In[31]:
+
 
 immos = {}
 
-b = 'Sachsen'
-s = 'Dresden'
-k = 'Wohnung'
-w = 'Miete'
+b = 'Sachsen' # Bundesland
+s = 'Dresden' # Stadt
+k = 'Haus' # Wohnung oder Haus
+w = 'Kauf' # Miete oder Kauf
 
 page = 0
 print('Suche %s / %s' % (k, w))
@@ -135,11 +138,18 @@ while True:
         realEstate['numberOfRooms'] = realEstate_json['numberOfRooms']
         realEstate['livingSpace'] = realEstate_json['livingSpace']
         
-        realEstate['balcony'] = realEstate_json['balcony']
-        realEstate['builtInKitchen'] = realEstate_json['builtInKitchen']
-        realEstate['garden'] = realEstate_json['garden']
-        realEstate['price'] = realEstate_json['price']['value']
-        realEstate['privateOffer'] = realEstate_json['privateOffer']
+        if k=='Wohnung':
+            realEstate['balcony'] = realEstate_json['balcony']
+            realEstate['builtInKitchen'] = realEstate_json['builtInKitchen']
+            realEstate['garden'] = realEstate_json['garden']
+            realEstate['price'] = realEstate_json['price']['value']
+            realEstate['privateOffer'] = realEstate_json['privateOffer']
+        elif k=='Haus':
+            realEstate['isBarrierFree'] = realEstate_json['isBarrierFree']
+            realEstate['cellar'] = realEstate_json['cellar']
+            realEstate['plotArea'] = realEstate_json['plotArea']
+            realEstate['price'] = realEstate_json['price']['value']
+            realEstate['privateOffer'] = realEstate_json['privateOffer']
         
         realEstate['floorplan'] = realEstate_json['floorplan']
         realEstate['from'] = realEstate_json['companyWideCustomerId']
@@ -151,48 +161,61 @@ while True:
     print('Scrape Page %i/%i (%i Immobilien %s %s gefunden)' % (page, numberOfPages, len(immos), k, w))
 
 
+# In[32]:
+
+
+print("Scraped %i Immos" % len(immos))
+
+
 # ## Datenaufbereitung & Cleaning
 # 
 # Die gesammelten Daten werden in ein sauberes Datenformat konvertiert, welches z.B. auch mit Excel gelesen werden kann. Weiterhin werden die Ergebnisse pseudonymisiert, d.h. die Anbieter bekommen eindeutige Nummern statt Klarnamen.
 
-# In[5]:
-
-import datetime
-timestamp = datetime.datetime.strftime(datetime.datetime.now(), '%Y-%m-%d-%H-%M')
+# In[33]:
 
 
-# In[6]:
+from datetime import datetime
+timestamp = datetime.strftime(datetime.now(), '%Y-%m-%d-%H-%M')
+
+
+# In[34]:
+
 
 import pandas as pd
 
 
-# In[7]:
+# In[35]:
+
 
 df = pd.DataFrame(immos).T
 df.index.name = 'ID'
 
 
-# In[8]:
+# In[36]:
+
 
 len(df)
 
 
-# In[9]:
+# In[37]:
+
 
 df.head()
 
 
 # ## Alles Dumpen
 
-# In[10]:
+# In[38]:
 
-f = open('%s-%s-%s.csv' % (timestamp, k, w), 'wb')
+
+f = open('%s-%s-%s.csv' % (timestamp, k, w), 'w')
 f.write('# %s %s from immoscout24.de on %s\n' % (k,w,timestamp))
 df[(df['Haus/Wohnung']==k) & (df['Miete/Kauf']==w)].to_csv(f, encoding='utf-8')
 f.close()
 
 
-# In[11]:
+# In[39]:
+
 
 df.to_excel('%s-%s-%s.xlsx' % (timestamp, k, w))
 
