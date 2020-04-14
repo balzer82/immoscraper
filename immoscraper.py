@@ -1,11 +1,11 @@
-#!/usr/bin/python
+#!/usr/bin/env python#!/usr/bin/python
 # coding: utf-8
 
 # # Immoscout24.de Scraper
 # 
 # Ein Script zum dumpen (in `.csv` schreiben) von Immobilien, welche auf [immoscout24.de](http://immoscout24.de) angeboten werden
 
-# In[5]:
+# In[1]:
 
 
 from bs4 import BeautifulSoup
@@ -16,7 +16,7 @@ from random import choice
 import time
 
 
-# In[7]:
+# In[2]:
 
 
 # urlquery from Achim Tack. Thank you!
@@ -49,7 +49,7 @@ def urlquery(url):
         print('Something went wrong with Crawling:\n%s' % e)
 
 
-# In[9]:
+# In[3]:
 
 
 def immoscout24parser(url):
@@ -82,14 +82,15 @@ def immoscout24parser(url):
 # 
 # Geht Wohnungen und Häuser, jeweils zum Kauf und Miete durch und sammelt die Daten
 
-# In[31]:
+# In[4]:
 
 
 immos = {}
 
+# See immoscout24.de URL in Browser!
 b = 'Sachsen' # Bundesland
 s = 'Dresden' # Stadt
-k = 'Haus' # Wohnung oder Haus
+k = 'Wohnung' # Wohnung oder Haus
 w = 'Kauf' # Miete oder Kauf
 
 page = 0
@@ -150,6 +151,7 @@ while True:
             realEstate['plotArea'] = realEstate_json['plotArea']
             realEstate['price'] = realEstate_json['price']['value']
             realEstate['privateOffer'] = realEstate_json['privateOffer']
+            realEstate['energyPerformanceCertificate'] = realEstate_json['energyPerformanceCertificate']
         
         realEstate['floorplan'] = realEstate_json['floorplan']
         realEstate['from'] = realEstate_json['companyWideCustomerId']
@@ -157,11 +159,23 @@ while True:
         realEstate['url'] = u'https://www.immobilienscout24.de/expose/%s' % realEstate['ID']
 
         immos[realEstate['ID']] = realEstate
-
+        
     print('Scrape Page %i/%i (%i Immobilien %s %s gefunden)' % (page, numberOfPages, len(immos), k, w))
 
 
-# In[32]:
+# In[ ]:
+
+
+
+
+
+# In[ ]:
+
+
+
+
+
+# In[6]:
 
 
 print("Scraped %i Immos" % len(immos))
@@ -171,33 +185,52 @@ print("Scraped %i Immos" % len(immos))
 # 
 # Die gesammelten Daten werden in ein sauberes Datenformat konvertiert, welches z.B. auch mit Excel gelesen werden kann. Weiterhin werden die Ergebnisse pseudonymisiert, d.h. die Anbieter bekommen eindeutige Nummern statt Klarnamen.
 
-# In[33]:
+# In[7]:
 
 
 from datetime import datetime
-timestamp = datetime.strftime(datetime.now(), '%Y-%m-%d-%H-%M')
+timestamp = datetime.strftime(datetime.now(), '%Y-%m-%d')
 
 
-# In[34]:
+# In[8]:
 
 
 import pandas as pd
 
 
-# In[35]:
+# In[9]:
 
 
 df = pd.DataFrame(immos).T
 df.index.name = 'ID'
 
 
-# In[36]:
+# In[ ]:
+
+
+
+
+
+# In[10]:
+
+
+df.livingSpace[df.livingSpace==0] = None
+df['EUR/qm'] = df.price / df.livingSpace
+
+
+# In[11]:
+
+
+df.sort_values(by='EUR/qm', inplace=True)
+
+
+# In[12]:
 
 
 len(df)
 
 
-# In[37]:
+# In[13]:
 
 
 df.head()
@@ -205,19 +238,19 @@ df.head()
 
 # ## Alles Dumpen
 
-# In[38]:
+# In[14]:
 
 
-f = open('%s-%s-%s.csv' % (timestamp, k, w), 'w')
+f = open('%s-%s-%s-%s-%s.csv' % (timestamp, b, s, k, w), 'w')
 f.write('# %s %s from immoscout24.de on %s\n' % (k,w,timestamp))
 df[(df['Haus/Wohnung']==k) & (df['Miete/Kauf']==w)].to_csv(f, encoding='utf-8')
 f.close()
 
 
-# In[39]:
+# In[15]:
 
 
-df.to_excel('%s-%s-%s.xlsx' % (timestamp, k, w))
+df.to_excel('%s-%s-%s-%s-%s.xlsx' % (timestamp, b, s, k, w))
 
 
 # Fragen? [@Balzer82](https://twitter.com/Balzer82)
